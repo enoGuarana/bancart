@@ -1,0 +1,71 @@
+# 🍔 Bancart - Cardápio Digital com Inteligência de Vendas
+
+> Um sistema de cardápio digital leve, focado em conversão e retenção de clientes para bares e restaurantes. Integrado diretamente ao WhatsApp.
+
+![Status do Projeto](https://img.shields.io/badge/status-concluido-brightgreen)
+![Tecnologias](https://img.shields.io/badge/tech-html%20css%20js-blue)
+
+## 🎯 Sobre o Projeto
+
+O **Bancart** não é apenas um cardápio digital. É uma ferramenta de vendas projetada para resolver problemas reais de atendimento em estabelecimentos de alimentação. Ele elimina a necessidade de garçons para tirar pedidos simples, agiliza o fechamento de contas e aplica estratégias de **Neuromarketing** e **Gamificação** para aumentar o ticket médio.
+
+### ✨ Principais Funcionalidades
+
+* **⚡ Ultra Leve:** Feito em HTML/CSS/JS puro (Vanilla). Não requer backend complexo nem banco de dados. Carrega instantaneamente em qualquer celular.
+* **🛒 Carrinho Dinâmico:** Adição e remoção de itens em tempo real com cálculo automático de subtotal.
+* **📲 Pedido via WhatsApp:** O cliente monta o pedido e o sistema gera uma mensagem formatada pronta para enviar ao garçom/balcão.
+* **🔍 Busca Inteligente:** Filtro instantâneo de produtos por nome.
+* **🏷️ Categorias Navegáveis:** UX otimizada com scroll suave entre seções (Cervejas, Drinks, Petiscos).
+* **📢 Pop-ups de Marketing:** Modais configuráveis para "Quem Somos", Promoções ou Avisos importantes.
+
+## 🚀 Estratégias de Vendas Embutidas
+
+Este sistema foi desenvolvido com base no manual *"7 Estratégias para Retenção"*, incluindo:
+
+1.  **Gatilhos de Escassez e Urgência:** Destaque visual para ofertas.
+2.  **Facilitador de Decisão:** Fotos grandes e descrições apetitosas.
+3.  **Fricção Zero:** Não exige login ou cadastro do cliente para ver o menu.
+
+## 🛠️ Como Usar (Instalação e Configuração)
+
+Este projeto é **"Plug & Play"**. Para utilizar em seu comércio ou de um cliente:
+
+1.  **Clone o repositório:**
+    ```bash
+    git clone [https://github.com/SEU-USUARIO/bancart-menu.git](https://github.com/SEU-USUARIO/bancart-menu.git)
+    ```
+
+2.  **Personalize o Cardápio:**
+    Abra o arquivo `index.html` e edite a constante `cardapio` no final do arquivo:
+    ```javascript
+    const cardapio = [
+        {
+            categoria: "Cervejas",
+            id_cat: "cervejas",
+            itens: [
+                { nome: "Heineken", preco: 15.00, descricao: "600ml" },
+                // Adicione seus itens aqui
+            ]
+        }
+    ];
+    ```
+
+3.  **Configure o WhatsApp:**
+    Na função `enviarWhatsApp()`, altere o número de telefone para o do estabelecimento:
+    ```javascript
+    const tel = "5561999999999"; // Seu número aqui
+    ```
+
+4.  **Hospede Gratuitamente:**
+    Basta arrastar a pasta do projeto para o [Netlify Drop](https://app.netlify.com/drop) ou ativar o GitHub Pages.
+
+## 📱 Screenshots
+
+*(Adicione aqui prints da tela do celular mostrando o cardápio)*
+
+## 📄 Licença
+
+Este projeto é de uso livre para estudos. Para uso comercial, entre em contato com o desenvolvedor.
+
+---
+Desenvolvido por **[Seu Nome]** - *Especialista em Soluções para Food Service.*
