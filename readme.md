@@ -59,6 +59,8 @@ Este projeto é **"Plug & Play"**. Para utilizar em seu comércio ou de um clien
 ## 📱 Screenshots
 
 <img width="933" height="886" alt="image" src="https://github.com/user-attachments/assets/1ef38535-c04d-4d28-ac49-e50dd8b32a31" />
+<img width="1088" height="712" alt="image" src="https://github.com/user-attachments/assets/db5cdab7-12b0-476e-84e3-42e88a85779e" />
+<img width="1078" height="682" alt="image" src="https://github.com/user-attachments/assets/d638b118-c3e8-49e4-92e2-6cb5870cd638" />
 
 
 ## 📄 Licença
