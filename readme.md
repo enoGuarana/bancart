@@ -58,11 +58,9 @@ Este projeto é **"Plug & Play"**. Para utilizar em seu comércio ou de um clien
 
 ## 📱 Screenshots
 
-*(Adicione aqui prints da tela do celular mostrando o cardápio)*
+<img width="933" height="886" alt="image" src="https://github.com/user-attachments/assets/1ef38535-c04d-4d28-ac49-e50dd8b32a31" />
+
 
 ## 📄 Licença
 
 Este projeto é de uso livre para estudos. Para uso comercial, entre em contato com o desenvolvedor.
-
----
-Desenvolvido por **[Seu Nome]** - *Especialista em Soluções para Food Service.*
