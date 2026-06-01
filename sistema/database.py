@@ -18,7 +18,7 @@ def iniciar_db():
         codigo TEXT
     )""")
     
-    # 2. TABELA PAI: Atendimentos (Comandas de Mesas)
+    # 2. TABELA PAI: Atendimentos (Comandas de Mesas e Identificadores do Balcão)
     c.execute("""CREATE TABLE IF NOT EXISTS atendimentos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mesa_id INTEGER,
@@ -32,14 +32,14 @@ def iniciar_db():
     # 3. TABELA FILHO: Itens do Atendimento (Produtos consumidos na comanda)
     c.execute("""CREATE TABLE IF NOT EXISTS itens_atendimento (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        atendimento_id INTEGER, -- Liga direta com a tabela pai
+        atendimento_id INTEGER, -- Ligação direta com a tabela pai
         produto_nome TEXT,
         qtd INTEGER,
         total REAL,
         FOREIGN KEY(atendimento_id) REFERENCES atendimentos(id) ON DELETE CASCADE
     )""")
     
-    # 4. Tabela de Vendas Avulsas (Balcão Rápido) - Mantida simples e direta
+    # 4. Tabela de Vendas Avulsas (Balcão Rápido)
     c.execute("""CREATE TABLE IF NOT EXISTS vendas_balcao (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         produto_nome TEXT,
@@ -49,7 +49,7 @@ def iniciar_db():
         pagamento TEXT
     )""")
     
-    # 5. Tabela do Controle do Fluxo de Caixa
+    # 5. Tabela do Controle do Fluxo de Caixa (Abertura e Fechamento)
     c.execute("""CREATE TABLE IF NOT EXISTS controle_caixa (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         data TEXT,
@@ -57,8 +57,19 @@ def iniciar_db():
         valor_fechamento REAL,
         status TEXT
     )""")
+
+    # 6. TABELA DE AUDITORIA: Histórico Consolidado de Itens Finalizados
+    c.execute("""CREATE TABLE IF NOT EXISTS vendas_consolidadas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hora TEXT,
+        origem TEXT,
+        produto TEXT,
+        qtd INTEGER,
+        total REAL,
+        pagamento TEXT
+    )""")
     
-    # Verificação de compatibilidade de colunas antigas
+    # Verificação de compatibilidade para garantir que a coluna codigo exista
     try:
         c.execute("SELECT codigo FROM produtos LIMIT 1")
     except sqlite3.OperationalError:
@@ -75,7 +86,11 @@ def fazer_backup():
         shutil.copy(DB_NAME, f"backups/backup_{data}.db")
 
 def processar_baixa_estoque_vinculado(cursor, codigo_produto_vendido, qtd_vendida):
-    """Regra de Negócio: Jantinha (001) consome 1 Espeto (100)"""
+    """
+    Regra de Negócio: Realiza a checagem e baixa de estoque manual.
+    (Esta função permanece aqui para compatibilidade com rotinas legadas, 
+    visto que as abas agora utilizam a seleção dinâmica por ID).
+    """
     if not codigo_produto_vendido:
         return
 

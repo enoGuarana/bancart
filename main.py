@@ -24,14 +24,7 @@ def obter_caminho_recurso(caminho_relativo):
 
     return os.path.join(base_path, caminho_relativo)
 
-# --- EXEMPLO DE USO ---
-# Se antes você abria um arquivo assim:
-# com open("sistema/dados.csv") as f:
-
-# Agora você deve abrir assim:
-caminho_do_arquivo = obter_caminho_recurso("sistema/dados.csv")
-with open(caminho_do_arquivo, "r") as f:
-    conteudo = f.read()
+# --- O EXEMPLO FOI REMOVIDO DAQUI PARA EVITAR O ERRO DE ARQUIVO NÃO ENCONTRADO ---
 
 class BancartApp:
     def __init__(self, root):
