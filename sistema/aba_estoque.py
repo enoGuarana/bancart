@@ -111,11 +111,17 @@ class AbaEstoque(tk.Frame):
     
     def salvar_produto(self):
         try:
-            n = self.ent_nome.get()
-            p = float(self.ent_preco.get().replace(',','.'))
-            e = int(self.ent_est.get())
-            cod = self.ent_cod.get()
-            if not n: return
+            n = self.ent_nome.get().strip()
+            preco_texto = self.ent_preco.get().strip()
+            estoque_texto = self.ent_est.get().strip()
+            p = float(preco_texto.replace(',','.')) if preco_texto else 0.0
+            e = int(estoque_texto) if estoque_texto else 0
+            cod = self.ent_cod.get().strip() or None
+            if not n:
+                messagebox.showerror("Erro", "O nome do produto é obrigatório.")
+                return
+            if p < 0 or e < 0:
+                raise ValueError
             
             conn = sqlite3.connect(DB_NAME)
             conn.cursor().execute("INSERT INTO produtos (nome,preco,estoque,codigo) VALUES (?,?,?,?)",(n,p,e,cod))
@@ -153,29 +159,35 @@ class AbaEstoque(tk.Frame):
                 leitor_csv = csv.DictReader(f, delimiter=separador)
                 
                 # Validação rápida de cabeçalho
-                campos_obrigatorios = ['codigo', 'nome', 'preco', 'estoque']
+                campos_obrigatorios = ['nome']
                 if not all(campo in leitor_csv.fieldnames for campo in campos_obrigatorios):
-                    messagebox.showerror("Erro de Formato", "O arquivo CSV deve conter exatamente as colunas:\ncodigo, nome, preco, estoque")
+                    messagebox.showerror("Erro de Formato", "O arquivo CSV deve conter a coluna 'nome'.\nAs colunas codigo, preco e estoque são opcionais.")
                     conn.close()
                     return
 
                 for linha in leitor_csv:
                     # Limpa e valida os dados de cada linha
-                    codigo = str(linha['codigo']).strip()
+                    codigo = str(linha.get('codigo') or '').strip() or None
                     nome = str(linha['nome']).strip().upper()
                     
                     try:
-                        preco = float(linha['preco'].replace(',', '.'))
-                        estoque = int(linha['estoque'])
+                        preco_texto = str(linha.get('preco') or '').strip()
+                        estoque_texto = str(linha.get('estoque') or '').strip()
+                        preco = float(preco_texto.replace(',', '.')) if preco_texto else 0.0
+                        estoque = int(estoque_texto) if estoque_texto else 0
+                        if preco < 0 or estoque < 0:
+                            raise ValueError
                     except ValueError:
                         # Pula linhas com valores quebrados ou inválidos (proteção de dados)
                         continue
 
-                    if not nome or not codigo:
+                    if not nome:
                         continue
 
                     # 3. Verifica se o produto com esse código já existe no banco de dados
-                    produto_existente = cursor.execute("SELECT id FROM produtos WHERE codigo = ?", (codigo,)).fetchone()
+                    produto_existente = None
+                    if codigo:
+                        produto_existente = cursor.execute("SELECT id FROM produtos WHERE codigo = ?", (codigo,)).fetchone()
                     
                     if produto_existente:
                         # Se já existe, apenas SOMA o novo estoque importado e atualiza o preço
@@ -197,7 +209,6 @@ class AbaEstoque(tk.Frame):
             conn.close()
             
             # 4. Atualiza os componentesvisuais e avisa o operador
-            self.salvar_produto() # Recarrega a tabela (Treeview) da AbaEstoque
             if hasattr(self.app, 'atualizar_todos_produtos'):
                 self.app.atualizar_todos_produtos() # Atualiza os caches de busca das outras abas (balcão, mesas...)
                 
@@ -212,7 +223,17 @@ class AbaEstoque(tk.Frame):
     def atualizar_produto(self):
         if not self.id_produto_selecionado: return
         try:
-            n = self.ent_nome.get(); p = float(self.ent_preco.get().replace(',','.')); e = int(self.ent_est.get()); cod = self.ent_cod.get()
+            n = self.ent_nome.get().strip()
+            preco_texto = self.ent_preco.get().strip()
+            estoque_texto = self.ent_est.get().strip()
+            p = float(preco_texto.replace(',','.')) if preco_texto else 0.0
+            e = int(estoque_texto) if estoque_texto else 0
+            cod = self.ent_cod.get().strip() or None
+            if not n:
+                messagebox.showerror("Erro", "O nome do produto é obrigatório.")
+                return
+            if p < 0 or e < 0:
+                raise ValueError
             conn = sqlite3.connect(DB_NAME)
             conn.cursor().execute("UPDATE produtos SET nome=?,preco=?,estoque=?,codigo=? WHERE id=?",(n,p,e,cod,self.id_produto_selecionado))
             conn.commit(); conn.close()

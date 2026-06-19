@@ -30,6 +30,7 @@ class AbaBalcao(tk.Frame):
         self.ent_busca_prod.bind("<FocusIn>", self.limpar_placeholder_busca)
         self.ent_busca_prod.bind("<FocusOut>", self.restaurar_placeholder_busca)
         self.ent_busca_prod.bind("<KeyRelease>", self.filtrar_produtos_busca)
+        self.ent_busca_prod.bind("<Return>", self.selecionar_produto_por_busca)
         self.ent_busca_prod.bind("<Down>", lambda e: self.list_sugestoes.focus_set() if self.list_sugestoes.winfo_viewable() else None)
         
         self.btn_ver_todos = tk.Button(fr_busca_hibrida, text="🔽", font=('Arial', 8), bg='white', fg='black', bd=1, relief='flat', command=self.exibir_lista_completa)
@@ -70,11 +71,30 @@ class AbaBalcao(tk.Frame):
 
     def atualizar_combobox(self, lista_cb):
         self.lista_produtos_cache = []
-        for item in lista_cb:
+        produtos_por_id = {item[0]: item for item in self.app.lista_produtos_cache}
+        for texto_completo in lista_cb:
             try:
-                partes = item.split(' - ')
-                self.lista_produtos_cache.append({'id': int(partes[0]), 'nome': partes[1], 'texto_completo': item})
-            except: pass
+                produto_id = int(texto_completo.split(' - ', 1)[0])
+                produto = produtos_por_id.get(produto_id)
+                if produto:
+                    nome = str(produto[1])
+                    codigo = str(produto[4]).strip() if produto[4] is not None else ""
+                else:
+                    nome = texto_completo.split(' - ', 1)[1].split(' | ', 1)[0]
+                    codigo = ""
+
+                texto_exibicao = texto_completo
+                if codigo:
+                    texto_exibicao += f" | Cód. barras: {codigo}"
+
+                self.lista_produtos_cache.append({
+                    'id': produto_id,
+                    'nome': nome,
+                    'codigo': codigo,
+                    'texto_completo': texto_exibicao
+                })
+            except (ValueError, IndexError):
+                pass
 
     def limpar_placeholder_busca(self, event):
         if self.ent_busca_prod.get() == "Digite o nome ou código...":
@@ -100,12 +120,50 @@ class AbaBalcao(tk.Frame):
         if event.keysym in ["Up", "Down", "Left", "Right", "Return"]: return
         termo = self.ent_busca_prod.get().strip().lower()
         if not termo or termo == "digite o nome ou código...": self.list_sugestoes.pack_forget(); self.produto_selecionado_id = None; return
-        resultados = [p for p in self.lista_produtos_cache if termo in p['nome'].lower() or termo in str(p['id'])]
+        resultados = [
+            p for p in self.lista_produtos_cache
+            if termo in p['nome'].lower()
+            or termo in p.get('codigo', '').lower()
+            or termo in str(p['id'])
+        ]
         self.list_sugestoes.delete(0, tk.END)
         if resultados:
             self.list_sugestoes.pack(fill='x', padx=30, pady=2)
             for prod in resultados: self.list_sugestoes.insert(tk.END, prod['texto_completo'])
         else: self.list_sugestoes.pack_forget(); self.produto_selecionado_id = None
+
+    def selecionar_produto_por_busca(self, event=None):
+        """Seleciona pelo código bipado ou pelo único resultado da pesquisa."""
+        termo = self.ent_busca_prod.get().strip().lower()
+        if not termo:
+            return "break"
+
+        correspondencias_exatas = [
+            p for p in self.lista_produtos_cache
+            if p.get('codigo', '').lower() == termo
+        ]
+        if correspondencias_exatas:
+            self.definir_produto_selecionado(correspondencias_exatas[0])
+            return "break"
+
+        resultados = [
+            p for p in self.lista_produtos_cache
+            if termo in p['nome'].lower()
+            or termo in p.get('codigo', '').lower()
+            or termo in str(p['id'])
+        ]
+        if len(resultados) == 1:
+            self.definir_produto_selecionado(resultados[0])
+        return "break"
+
+    def definir_produto_selecionado(self, produto):
+        self.produto_selecionado_id = produto['id']
+        self.ent_busca_prod.config(fg='black')
+        self.ent_busca_prod.delete(0, tk.END)
+        self.ent_busca_prod.insert(0, produto['nome'])
+        self.list_sugestoes.pack_forget()
+        self.ent_qtd_avulso.focus_set()
+        self.ent_qtd_avulso.selection_range(0, tk.END)
 
     def selecionar_produto_lista(self, event):
         selecao = self.list_sugestoes.curselection()
@@ -113,12 +171,8 @@ class AbaBalcao(tk.Frame):
         texto_produto = self.list_sugestoes.get(selecao[0])
         try:
             pid = int(texto_produto.split(' - ')[0])
-            self.produto_selecionado_id = pid
-            self.ent_busca_prod.config(fg='black')
-            self.ent_busca_prod.delete(0, tk.END)
-            self.ent_busca_prod.insert(0, texto_produto.split(' - ')[1])
-            self.list_sugestoes.pack_forget()
-            self.ent_qtd_avulso.focus_set(); self.ent_qtd_avulso.selection_range(0, tk.END)
+            produto = next(p for p in self.lista_produtos_cache if p['id'] == pid)
+            self.definir_produto_selecionado(produto)
         except Exception as e: print(e)
 
     # --- REQUISITO 2: POPUP EXCLUSIVO DE SELEÇÃO DE ESPETO ---
@@ -187,14 +241,28 @@ class AbaBalcao(tk.Frame):
     def finalizar_avulso(self):
         if not self.carrinho_avulso: return
         total_venda = sum(item['tot'] for item in self.carrinho_avulso)
-        forma_pgto = self.cb_pag_avulso.get()
+        saldo_restante = [total_venda]
+        pagamentos_parciais = []
 
-        def efetivar_venda_balcao():
+        janela_desc = tk.Toplevel(self)
+        janela_desc.title("Fechamento - Balcão")
+        janela_desc.geometry("420x380")
+        janela_desc.configure(bg=CORES['painel'])
+        janela_desc.resizable(False, False)
+        janela_desc.transient(self)
+
+        def efetivar_venda_balcao(desconto, forma_pgto_final):
             conn = sqlite3.connect(DB_NAME); c = conn.cursor(); dt_agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             try:
-                c.execute("INSERT INTO atendimentos (mesa_id, data_abertura, data_fechamento, desconto, pagamento, status) VALUES (?,?,?,?,?,?)", (0, dt_agora, dt_agora, 0.0, forma_pgto, 'FECHADO'))
+                valor_final = saldo_restante[0] - desconto
+                formas_usadas = [forma for _, forma in pagamentos_parciais]
+                if valor_final > 0.01 or not formas_usadas:
+                    formas_usadas.append(forma_pgto_final)
+                pagamento_resumo = " + ".join(dict.fromkeys(formas_usadas))
+                c.execute("INSERT INTO atendimentos (mesa_id, data_abertura, data_fechamento, desconto, pagamento, status) VALUES (?,?,?,?,?,?)", (0, dt_agora, dt_agora, desconto, pagamento_resumo, 'FECHADO'))
                 id_balcao_gerado = c.lastrowid
                 hora_txt = dt_agora.split(' ')[1]
+                venda_dividida = bool(pagamentos_parciais)
 
                 for item in self.carrinho_avulso:
                     # Se houver espeto amarrado na jantinha, realiza a baixa do estoque dele
@@ -207,42 +275,119 @@ class AbaBalcao(tk.Frame):
                     # --- REQUISITO 1: GRAVAÇÃO EM TABELA DE RELATÓRIO INDIVIDUAL DO BALCÃO ---
                     c.execute(
                         "INSERT INTO vendas_consolidadas (hora, origem, produto, qtd, total, pagamento) VALUES (?,?,?,?,?,?)",
-                        (hora_txt, "BALCÃO", item['nome'], item['qtd'], item['tot'], forma_pgto)
+                        (hora_txt, "BALCÃO", item['nome'], item['qtd'], 0.0 if venda_dividida else item['tot'], "DETALHE" if venda_dividida else forma_pgto_final)
+                    )
+
+                for valor_pago, forma_pgto in pagamentos_parciais:
+                    nome_parcial = f"PAG. PARCIAL ({forma_pgto})"
+                    c.execute("INSERT INTO itens_atendimento (atendimento_id, produto_nome, qtd, total) VALUES (?,?,?,?)", (id_balcao_gerado, nome_parcial, 1, 0.0))
+                    c.execute(
+                        "INSERT INTO vendas_consolidadas (hora, origem, produto, qtd, total, pagamento) VALUES (?,?,?,?,?,?)",
+                        (hora_txt, "BALCÃO", nome_parcial, 1, valor_pago, forma_pgto)
+                    )
+
+                if venda_dividida and valor_final > 0.01:
+                    c.execute(
+                        "INSERT INTO vendas_consolidadas (hora, origem, produto, qtd, total, pagamento) VALUES (?,?,?,?,?,?)",
+                        (hora_txt, "BALCÃO", f"SALDO FINAL ({forma_pgto_final})", 1, valor_final, forma_pgto_final)
+                    )
+
+                if desconto > 0:
+                    c.execute("INSERT INTO itens_atendimento (atendimento_id, produto_nome, qtd, total) VALUES (?,?,?,?)", (id_balcao_gerado, "DESCONTO MANUAL", 1, -desconto))
+                    c.execute(
+                        "INSERT INTO vendas_consolidadas (hora, origem, produto, qtd, total, pagamento) VALUES (?,?,?,?,?,?)",
+                        (hora_txt, "BALCÃO", "DESCONTO MANUAL", 1, 0.0 if venda_dividida else -desconto, "DETALHE" if venda_dividida else forma_pgto_final)
                     )
                 
                 conn.commit()
+                janela_desc.destroy()
                 self.limpar_avulso(); self.app.atualizar_todos_produtos(); self.app.aba_caixa.carregar_historico()
-                if messagebox.askyesno("Venda Balcão", "Venda realizada!\nDeseja o PDF?"): self.emitir_recibo_balcao_pdf(id_balcao_gerado, total_venda)
+                if hasattr(self, 'emitir_recibo_balcao_pdf') and messagebox.askyesno("Venda Balcão", "Venda realizada!\nDeseja o PDF?"):
+                    self.emitir_recibo_balcao_pdf(id_balcao_gerado, total_venda - desconto)
             except Exception as e: conn.rollback(); messagebox.showerror("Erro", str(e))
             finally: conn.close()
 
-        if forma_pgto == "DINHEIRO":
-            janela_troco = tk.Toplevel(self); janela_troco.title("Troco"); janela_troco.geometry("320x200"); janela_troco.configure(bg=CORES['painel']); janela_troco.transient(self)
-            tk.Label(janela_troco, text="💵 VENDA EM DINHEIRO", font=('Arial', 11, 'bold'), bg=CORES['painel'], fg=CORES['amarelo']).pack(pady=5)
-            tk.Label(janela_troco, text=f"Total: R$ {total_venda:.2f}", font=('Arial', 11), bg=CORES['painel'], fg='white').pack()
-            ent_recebido = tk.Entry(janela_troco, font=('Arial', 12), width=15, justify='center'); ent_recebido.insert(0, f"{total_venda:.2f}"); ent_recebido.pack(); ent_recebido.focus_set(); ent_recebido.selection_range(0, tk.END)
+        def solicitar_troco_dinheiro(valor_a_cobrar, funcao_sucesso):
+            janela_troco = tk.Toplevel(janela_desc); janela_troco.title("Calculadora de Troco"); janela_troco.geometry("320x200"); janela_troco.configure(bg=CORES['painel']); janela_troco.resizable(False, False); janela_troco.transient(janela_desc)
+            tk.Label(janela_troco, text="💵 PAGAMENTO EM DINHEIRO", font=('Arial', 11, 'bold'), bg=CORES['painel'], fg=CORES['amarelo']).pack(pady=5)
+            tk.Label(janela_troco, text=f"Valor a Pagar: R$ {valor_a_cobrar:.2f}", font=('Arial', 11), bg=CORES['painel'], fg='white').pack()
+            ent_recebido = tk.Entry(janela_troco, font=('Arial', 12), width=15, justify='center'); ent_recebido.insert(0, f"{valor_a_cobrar:.2f}"); ent_recebido.pack(); ent_recebido.focus_set(); ent_recebido.selection_range(0, tk.END)
             lbl_troco = tk.Label(janela_troco, text="TROCO: R$ 0.00", font=('Arial', 12, 'bold'), bg=CORES['painel'], fg=CORES['verde']); lbl_troco.pack(pady=5)
-            def calcular_troco(event=None):
+            def calcular(event=None):
                 try:
                     recebido = float(ent_recebido.get().replace(',', '.'))
-                    troco = recebido - total_venda
+                    troco = recebido - valor_a_cobrar
                     lbl_troco.config(text=f"TROCO: R$ {max(0.0, troco):.2f}" if troco >= 0 else "VALOR INSUFICIENTE", fg=CORES['verde'] if troco >= 0 else CORES['vermelho'])
                 except ValueError: lbl_troco.config(text="VALOR INVÁLIDO", fg=CORES['vermelho'])
-            ent_recebido.bind("<KeyRelease>", calcular_troco)
-            def confirmar_e_fechar():
+            ent_recebido.bind("<KeyRelease>", calcular)
+            def confirmar_pgto():
                 try:
                     recebido = float(ent_recebido.get().replace(',', '.'))
-                    if recebido < total_venda: messagebox.showerror("Erro", "Valor insuficiente!", parent=janela_troco); return
-                    troco = recebido - total_venda
+                    if recebido < valor_a_cobrar: messagebox.showerror("Erro", "Valor menor que cobrado!", parent=janela_troco); return
+                    troco = recebido - valor_a_cobrar
                 except ValueError: return
-                if troco > 0: messagebox.showinfo("Troco", f"Troco: R$ {troco:.2f}", parent=janela_troco)
-                janela_troco.destroy(); efetivar_venda_balcao()
+                if troco > 0: messagebox.showinfo("Troco", f"Devolver: R$ {troco:.2f}", parent=janela_troco)
+                janela_troco.destroy(); funcao_sucesso()
             fr_bnt = tk.Frame(janela_troco, bg=CORES['painel']); fr_bnt.pack(pady=10)
-            tk.Button(fr_bnt, text="PAGO EXATO", bg=CORES['busca'], fg='white', font=('Arial', 9, 'bold'), command=lambda: [ent_recebido.delete(0, tk.END), ent_recebido.insert(0, str(total_venda)), confirmar_e_fechar()]).pack(side='left', padx=5)
-            tk.Button(fr_bnt, text="FINALIZAR", bg=CORES['verde'], fg='white', font=('Arial', 9, 'bold'), command=confirmar_e_fechar).pack(side='left', padx=5)
+            tk.Button(fr_bnt, text="PAGO EXATO", bg=CORES['busca'], fg='white', font=('Arial', 9, 'bold'), command=lambda: [ent_recebido.delete(0, tk.END), ent_recebido.insert(0, str(valor_a_cobrar)), confirmar_pgto()]).pack(side='left', padx=5)
+            tk.Button(fr_bnt, text="CONFIRMAR", bg=CORES['verde'], fg='white', font=('Arial', 9, 'bold'), command=confirmar_pgto).pack(side='left', padx=5)
             janela_troco.update(); janela_troco.grab_set()
-        else:
-            if messagebox.askyesno("Confirmar", "Finalizar com cartão/pix?"): efetivar_venda_balcao()
+
+        def salvar_pagamento_parcial(valor_pago, forma_pgto):
+            pagamentos_parciais.append((valor_pago, forma_pgto))
+            saldo_restante[0] -= valor_pago
+            lbl_saldo.config(text=f"SALDO RESTANTE: R$ {saldo_restante[0]:.2f}", fg=CORES['vermelho'] if saldo_restante[0] > 0.01 else CORES['verde'])
+            ent_valor_pagar.delete(0, tk.END); ent_valor_pagar.insert(0, f"{saldo_restante[0]:.2f}")
+            if saldo_restante[0] <= 0.01:
+                finalizar_totalmente(deve_perguntar=False)
+            else:
+                messagebox.showinfo("Sucesso", f"Recebido R$ {valor_pago:.2f}!", parent=janela_desc)
+
+        def receber_pagamento_parcial():
+            try:
+                valor_pago = float(ent_valor_pagar.get().replace(',', '.'))
+                if valor_pago <= 0 or valor_pago > saldo_restante[0] + 0.01: raise ValueError
+            except ValueError: messagebox.showerror("Erro", "Valor inserido inválido.", parent=janela_desc); return
+            forma_pgto = cb_forma_parcial.get()
+            if forma_pgto == "DINHEIRO": solicitar_troco_dinheiro(valor_pago, lambda: salvar_pagamento_parcial(valor_pago, forma_pgto))
+            elif messagebox.askyesno("Confirmar", f"Receber R$ {valor_pago:.2f} no {forma_pgto}?", parent=janela_desc):
+                salvar_pagamento_parcial(valor_pago, forma_pgto)
+
+        def finalizar_totalmente(deve_perguntar=True):
+            try:
+                desconto = float(ent_desc.get().replace(',', '.'))
+                if desconto < 0 or desconto > saldo_restante[0]: raise ValueError
+            except ValueError: messagebox.showerror("Erro", "Valor de desconto inválido.", parent=janela_desc); return
+            total_final = saldo_restante[0] - desconto
+            forma_pgto_final = self.cb_pag_avulso.get()
+            if total_final <= 0.01:
+                efetivar_venda_balcao(desconto, forma_pgto_final)
+            elif forma_pgto_final == "DINHEIRO":
+                solicitar_troco_dinheiro(total_final, lambda: efetivar_venda_balcao(desconto, forma_pgto_final))
+            else:
+                texto = f"Total Restante: R$ {saldo_restante[0]:.2f}\nDesconto: R$ {desconto:.2f}\nValor Final: R$ {total_final:.2f}\nFechar com {forma_pgto_final}?"
+                if not deve_perguntar or messagebox.askyesno("Confirmar", texto, parent=janela_desc): efetivar_venda_balcao(desconto, forma_pgto_final)
+
+        def fechar_janela():
+            if pagamentos_parciais:
+                messagebox.showwarning("Pagamento em andamento", "Finalize a venda antes de fechar: há pagamentos parciais recebidos.", parent=janela_desc)
+                return
+            janela_desc.destroy()
+
+        tk.Label(janela_desc, text="FECHAMENTO DO BALCÃO", font=('Arial', 13, 'bold'), bg=CORES['painel'], fg=CORES['amarelo']).pack(pady=5)
+        lbl_saldo = tk.Label(janela_desc, text=f"SALDO RESTANTE: R$ {total_venda:.2f}", font=('Arial', 14, 'bold'), bg=CORES['painel'], fg=CORES['verde']); lbl_saldo.pack(pady=5)
+        fr_divisao = tk.LabelFrame(janela_desc, text=" Receber Pagamento Parcial (Dividir Conta) ", bg=CORES['painel'], fg='white', font=('Arial', 10, 'bold'), padx=10, pady=10); fr_divisao.pack(fill='x', padx=15, pady=5)
+        tk.Label(fr_divisao, text="Valor a pagar agora (R$):", bg=CORES['painel'], fg='white').grid(row=0, column=0, sticky='w', pady=2)
+        ent_valor_pagar = tk.Entry(fr_divisao, font=('Arial', 11), width=14, justify='center'); ent_valor_pagar.insert(0, f"{total_venda:.2f}"); ent_valor_pagar.grid(row=0, column=1, pady=2, padx=5)
+        tk.Label(fr_divisao, text="Forma de Pagamento:", bg=CORES['painel'], fg='white').grid(row=1, column=0, sticky='w', pady=2)
+        cb_forma_parcial = ttk.Combobox(fr_divisao, values=["DINHEIRO", "PIX", "CRÉDITO", "DÉBITO"], width=12, state="readonly"); cb_forma_parcial.current(0); cb_forma_parcial.grid(row=1, column=1, pady=2, padx=5)
+        tk.Button(fr_divisao, text="RECEBER PARTE", bg=CORES['azul'], fg='white', font=('Arial', 9, 'bold'), command=receber_pagamento_parcial).grid(row=0, column=2, rowspan=2, padx=10, ipady=4)
+        fr_total = tk.LabelFrame(janela_desc, text=" Encerrar Saldo Restante / Aplicar Desconto ", bg=CORES['painel'], fg='white', font=('Arial', 10, 'bold'), padx=10, pady=10); fr_total.pack(fill='x', padx=15, pady=10)
+        tk.Label(fr_total, text="Conceder Desconto (R$):", bg=CORES['painel'], fg='white').pack(side='left', padx=5)
+        ent_desc = tk.Entry(fr_total, font=('Arial', 11), width=12, justify='center'); ent_desc.insert(0, "0.00"); ent_desc.pack(side='left', padx=5)
+        tk.Button(fr_total, text="FECHAR CONTA", bg=CORES['verde'], fg='white', font=('Arial', 10, 'bold'), command=lambda: finalizar_totalmente(deve_perguntar=True)).pack(side='right', padx=5, ipady=2)
+        janela_desc.protocol("WM_DELETE_WINDOW", fechar_janela)
+        janela_desc.update(); janela_desc.grab_set(); ent_valor_pagar.focus_set(); ent_valor_pagar.selection_range(0, tk.END)
 
     def finalizar_cortesia(self):
         if not self.carrinho_avulso: return

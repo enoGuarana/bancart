@@ -12,10 +12,10 @@ def iniciar_db():
     # 1. Tabela de Produtos (Cadastro do Estoque)
     c.execute("""CREATE TABLE IF NOT EXISTS produtos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT, 
-        preco REAL, 
-        estoque INTEGER, 
-        codigo TEXT
+        nome TEXT,
+        preco REAL DEFAULT 0.0,
+        estoque INTEGER DEFAULT 0,
+        codigo TEXT DEFAULT NULL
     )""")
     
     # 2. TABELA PAI: Atendimentos (Comandas de Mesas e Identificadores do Balcão)
@@ -74,6 +74,10 @@ def iniciar_db():
         c.execute("SELECT codigo FROM produtos LIMIT 1")
     except sqlite3.OperationalError:
         c.execute("ALTER TABLE produtos ADD COLUMN codigo TEXT")
+
+    # Código de barras é opcional. Registros antigos com texto vazio passam a
+    # usar NULL, diferenciando corretamente "sem código" de um código real.
+    c.execute("UPDATE produtos SET codigo = NULL WHERE TRIM(COALESCE(codigo, '')) = ''")
         
     conn.commit()
     conn.close()
